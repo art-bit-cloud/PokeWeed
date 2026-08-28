@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#0a0e0c" />
+<meta name="description" content="PokeWeed — o fórum do bonde: capture, mostre, ensine e avalie." />
+<title>PokeWeed</title>
+
+<link rel="stylesheet" href="/css/base.css" />
+<link rel="stylesheet" href="/css/layout.css" />
+<link rel="stylesheet" href="/css/components.css" />
+<link rel="stylesheet" href="/css/views.css" />
+
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='46' fill='%23f0555a'/><path d='M4 50h92a46 46 0 0 1-92 0z' fill='%23f2f7f4'/><rect x='4' y='45' width='92' height='10' fill='%230a0e0c'/><circle cx='50' cy='50' r='13' fill='%23f2f7f4' stroke='%230a0e0c' stroke-width='6'/></svg>" />
+</head>
+<body>
+
+<!-- Folha de maconha desenhada uma vez, reaproveitada no ícone da Pokédex e na tampa dela. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <defs>
+    <path id="folhinha" d="M0,0 C-2,-6 -3.4,-9.5 -3,-12.5 L-5.6,-12 L-3.8,-16 L-6.6,-15.4 L-4.2,-19.8 L-6.4,-19.6 L-3.4,-24.2 L-4.8,-24.4 L-2,-28.6 L-1.2,-32.4 L0,-36 L1.2,-32.4 L2,-28.6 L4.8,-24.4 L3.4,-24.2 L6.4,-19.6 L4.2,-19.8 L6.6,-15.4 L3.8,-16 L5.6,-12 L3,-12.5 C3.4,-9.5 2,-6 0,0 Z" />
+    <g id="folha-maconha">
+      <use href="#folhinha" transform="rotate(0)" />
+      <use href="#folhinha" transform="rotate(32) scale(0.9)" />
+      <use href="#folhinha" transform="rotate(-32) scale(0.9)" />
+      <use href="#folhinha" transform="rotate(66) scale(0.68)" />
+      <use href="#folhinha" transform="rotate(-66) scale(0.68)" />
+      <use href="#folhinha" transform="rotate(102) scale(0.46)" />
+      <use href="#folhinha" transform="rotate(-102) scale(0.46)" />
+    </g>
+
+    <!-- Ícone "pokébola maconha": usado em todo lugar que antes tinha 📸,
+         pra representar a ação de capturar. -->
+    <symbol id="icone-captura" viewBox="0 0 64 64">
+      <path d="M5 32 A27 27 0 0 1 59 32 Z" fill="#f0555a" stroke="#0a0e0c" stroke-width="3" stroke-linejoin="round" />
+      <path d="M5 32 A27 27 0 0 0 59 32 Z" fill="#f2f7f4" stroke="#0a0e0c" stroke-width="3" stroke-linejoin="round" />
+      <rect x="4" y="28.5" width="56" height="7" fill="#0a0e0c" />
+      <circle cx="32" cy="32" r="12" fill="#0a0e0c" />
+      <circle cx="32" cy="32" r="9" fill="#12271a" />
+      <g transform="translate(32 36) scale(0.36)" fill="#5ede7c">
+        <use href="#folha-maconha" />
+      </g>
+    </symbol>
+  </defs>
+</svg>
+
+<div id="raiz"></div>
+
+<noscript>
+  <div style="padding:40px;text-align:center;color:#a9bcb1">
+    O PokeWeed precisa de JavaScript ligado pra funcionar.
+  </div>
+</noscript>
+
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>
