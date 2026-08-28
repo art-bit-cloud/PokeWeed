@@ -25,3 +25,6 @@ primary_region = 'ams'
 [mounts]
   source = "pokeweed_data"
   destination = "/data"
+
+[env]
+  DATA_DIR = "/data"
