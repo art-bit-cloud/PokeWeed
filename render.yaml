@@ -1,0 +1,30 @@
+# Configuração pronta pro Render (render.com).
+#
+# No painel: New > Blueprint > aponta pro repositório com esse arquivo.
+# Ele já cria o serviço, o disco persistente e as variáveis.
+#
+# IMPORTANTE: o disco é o que segura contas, fotos e vídeos entre deploys.
+# Sem ele, todo deploy zera o fórum.
+
+services:
+  - type: web
+    name: pokeweed
+    runtime: node
+    plan: starter          # o plano gratuito não permite disco persistente
+    region: oregon
+    branch: main
+    rootDir: server
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /api/secoes
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: POKEWEED_DATA
+        value: /dados
+      - key: MAX_VIDEO_MB
+        value: "40"
+    disk:
+      name: pokeweed-dados
+      mountPath: /dados
+      sizeGB: 5

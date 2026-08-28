@@ -1,0 +1,8 @@
+node_modules/
+server/certs/
+.env
+
+# Os dados ficam FORA da pasta do app (veja server/dados.js).
+# Estas linhas cobrem só o formato antigo, caso apareça uma pasta velha.
+server/pokeweed.db
+server/uploads/
