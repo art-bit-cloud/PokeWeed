@@ -70,7 +70,7 @@ select.entrada { appearance: none; background-image: none; }
 }
 .avatar.letra { background: linear-gradient(140deg, var(--green), var(--green-deep)); }
 .avatar.personagem { background: var(--surface-3); }
-.avatar.personagem .pj-svg { width: 100%; height: 100%; display: block; }
+.avatar.personagem .pj-svg { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
 .av-18 { width: 18px; height: 18px; font-size: 8.5px; }
 .av-24 { width: 24px; height: 24px; font-size: 11px; }
 .av-32 { width: 32px; height: 32px; font-size: 13px; }

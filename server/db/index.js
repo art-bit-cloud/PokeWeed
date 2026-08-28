@@ -209,6 +209,28 @@ db.exec(`UPDATE sections SET ativa = 0 WHERE slug = 'zoeira'`);
 // direto no banco depois sem que a semente sobrescreva.
 const { CATEGORIAS: CATEGORIAS_PERSONAGEM, ITENS: ITENS_PERSONAGEM } = require('./personagem-catalogo');
 
+// O catálogo mudou de estilo (de vetorial suave pra pixel art de verdade) —
+// as categorias/itens antigos não existem mais neste arquivo. Se o banco
+// ainda tiver alguma categoria que não está na lista nova, é sinal de que
+// ele foi semeado com o catálogo antigo: limpa tudo e recomeça do zero.
+// Personagem já equipado por algum usuário é resetado (character = NULL)
+// porque as peças antigas simplesmente não existem mais pra desenhar — cai
+// de volta no estado "sem personagem" (mesma tela de perfil de sempre),
+// sem quebrar nada, e a pessoa monta de novo em "Meu personagem" quando
+// quiser.
+const slugsCategoriasNovas = new Set(CATEGORIAS_PERSONAGEM.map((c) => c.slug));
+const slugsCategoriasNoBanco = db.prepare('SELECT slug FROM character_categories').all().map((r) => r.slug);
+const catalogoDesatualizado = slugsCategoriasNoBanco.some((slug) => !slugsCategoriasNovas.has(slug));
+if (catalogoDesatualizado) {
+  db.exec('DELETE FROM character_items');
+  db.exec('DELETE FROM character_categories');
+  db.exec('UPDATE users SET character = NULL WHERE character IS NOT NULL');
+  console.log(
+    '[PokeWeed] catálogo de personagens mudou de estilo (pixel art) — recriando do zero. ' +
+      'Quem já tinha personagem equipado precisa montar de novo em "Meu personagem".'
+  );
+}
+
 const inserirCategoria = db.prepare(
   `INSERT OR IGNORE INTO character_categories (slug, name, tipo, camada, posicao) VALUES (?, ?, ?, ?, ?)`
 );

@@ -1,324 +1,437 @@
-// Catálogo inicial do sistema de personagens.
+// Catálogo do sistema de personagens — pixel art de verdade, inspirado em
+// sprite de jogo 2D antigo (grade de 20x32 "pixels", contorno escuro,
+// poucas sombras, cores fortes, proporção chibi). Documentado a fundo
+// porque é o arquivo que mais vai crescer com o tempo.
 //
-// Cada categoria é uma aba do editor "Meu Personagem" e uma camada de
-// desenho (quanto maior `camada`, mais em cima ela fica). Cada item é um
-// fragmento SVG simples — no mesmo estilo vetorial do resto do site (a
-// pokébola, a folhinha, o ícone da Pokédex): formas geométricas limpas,
-// nada de emoji, nada de foto, nada de "boneco genérico".
+// Cada item é desenhado numa grade de pixels (server/db/pixel-art.js) e
+// convertido pra um fragmento SVG (<rect> comprimido por linha) — não tem
+// curva suave, gradiente ou canto arredondado em lugar nenhum: só pixel
+// pintado ou não. O contorno escuro ao redor de cada peça é automático
+// (contorno() olha os vizinhos vazios), então autorar uma peça nova é só
+// pintar as formas — não precisa desenhar a borda na mão.
 //
-// Pra crescer no futuro, um item novo é só uma linha nova neste arquivo
-// (ou, quando existir um admin, uma linha nova direto no banco) — o
-// código de desenho (personagem.js no cliente) não precisa mudar.
+// GRADE (20 larg. x 32 alt., eixo de simetria entre a coluna 9 e 10):
+//   cabeça:   círculo em (9.5, 7) raio 6.4  → mais ou menos y 0–13, x 3–16
+//   pescoço:  x 8–11, y 12–14
+//   ombros/torso: y 14–22 (largura varia por tipo de corpo)
+//   pernas:   x 7–8 e 11–12, y 23–28
+//   sapatos:  y 28–29 (fixos, não customizável — o pedido não incluía
+//             calça/tênis como categoria, só as listadas abaixo)
 //
-// GRADE DE COORDENADAS (viewBox "0 0 200 240"):
-//   cabeça:  círculo em (100,54) raio 30
-//   pescoço: x 92–108, y 78–98
-//   ombros:  y ≈ 98
-//   torso:   y 96–170 (largura varia por tipo de corpo)
-//   roupas de torso: largura fixa e "folgada" (x 56–144), cobre qualquer
-//     tipo de corpo por baixo — de propósito, visual streetwear largado.
-//   pernas:  x 84–96 (esquerda) e 104–116 (direita), y 170–224
-//   pés:     y 210–230
+// {{pele}}/{{pele_sombra}} e {{cabelo}}/{{cabelo_sombra}} são tokens de
+// texto: ficam escritos literalmente no SVG e só viram cor de verdade no
+// cliente (public/js/core/personagem.js), trocados pelo tom escolhido e
+// por uma versão mais escura dele (pra dar aquele degrade de "1 sombra só"
+// sem precisar de um item por combinação de cor).
 //
-// O item de "corpo" usa o texto {{pele}} onde entra a cor do tom de pele
-// escolhido — é a única categoria do tipo "cor" que não desenha nada
-// sozinha, só tinge o corpo.
-//
-// Nenhum fragmento usa <defs>/gradiente/clipPath com id: um mesmo item
-// pode aparecer dezenas de vezes numa tela (feed, ranking...) e ids
-// repetidos num HTML colidiriam. Sombra e brilho são só formas com
-// opacidade.
+// Pra crescer no futuro, um item novo é só uma entrada nova no array
+// ITENS (ou, com um admin, uma linha direto no banco) — nada no motor de
+// desenho do cliente precisa mudar.
 
-function ret(x, y, w, h, rx, cor, op) {
-  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${cor}"${op ? ` opacity="${op}"` : ''}/>`;
-}
-function circ(cx, cy, r, cor, op) {
-  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${cor}"${op ? ` opacity="${op}"` : ''}/>`;
-}
-function elipse(cx, cy, rx, ry, cor, op) {
-  return `<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}" fill="${cor}"${op ? ` opacity="${op}"` : ''}/>`;
-}
-function linha(pontos, cor, largura, cap = 'round') {
-  return `<path d="${pontos}" stroke="${cor}" stroke-width="${largura}" fill="none" stroke-linecap="${cap}"/>`;
-}
-function anel(cx, cy, r, cor, largura) {
-  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${cor}" stroke-width="${largura}"/>`;
-}
-const FUNDO_TOTAL = `${ret(0, 0, 200, 240, 0, '#000', 0)}`; // placeholder (não usado, cada fundo define o próprio base)
+const {
+  L, A, PRETO,
+  novaGrade, ret, px, circulo, meioCirculo, linhaH, linhaV, diagonal, touca,
+  espelhar, item,
+} = require('./pixel-art');
 
-// ---------- corpo (a única categoria "base": cabeça, pescoço, pernas e
-// mãos ficam sempre iguais; só a largura do torso/braço muda) ----------
-function corpo(tw, aw) {
-  return `
-    ${elipse(100, 227, 30, 6, '#000', 0.16)}
-    ${ret(84, 170, 12, 54, 6, '{{pele}}')}
-    ${ret(104, 170, 12, 54, 6, '{{pele}}')}
-    ${ret(100 - tw, 96, tw * 2, 74, 16, '{{pele}}')}
-    ${ret(100 - tw - aw, 100, aw, 58, aw / 2, '{{pele}}')}
-    ${ret(100 + tw, 100, aw, 58, aw / 2, '{{pele}}')}
-    ${circ(100 - tw - aw / 2, 160, 7, '{{pele}}')}
-    ${circ(100 + tw + aw / 2, 160, 7, '{{pele}}')}
-    ${ret(92, 78, 16, 20, 4, '{{pele}}')}
-    ${circ(100, 54, 30, '{{pele}}')}
-  `;
+const PELE = '{{pele}}';
+const PELE_SOMBRA = '{{pele_sombra}}';
+const CABELO = '{{cabelo}}';
+const CABELO_SOMBRA = '{{cabelo_sombra}}';
+
+// ---------- corpo base (cabeça, pescoço, pernas, pés — sempre iguais; só
+// a largura do torso/braço muda por tipo de físico) ----------
+function corpoBase(tw, aw) {
+  return (grade) => {
+    // pescoço
+    ret(grade, 8, 12, 2, 3, PELE_SOMBRA);
+    // torso (metade esquerda)
+    ret(grade, 10 - tw, 14, tw, 9, PELE);
+    // braço + mão (metade esquerda)
+    ret(grade, 10 - tw - aw, 16, aw, 6, PELE);
+    ret(grade, 10 - tw - aw, 22, aw, 2, PELE_SOMBRA);
+    // pernas + sapatos (fixo)
+    ret(grade, 7, 23, 2, 6, PELE_SOMBRA);
+    ret(grade, 6, 29, 4, 2, PRETO);
+    espelhar(grade);
+    // cabeça (simétrica por natureza — desenha depois do espelhar pra não
+    // ter risco de sobra de metade)
+    circulo(grade, 9.5, 7, 6.4, PELE);
+    // bochecha (sombra leve, um retângulo só do lado esquerdo)
+    ret(grade, 4, 8, 2, 3, PELE_SOMBRA);
+    // boca neutra
+    px(grade, 8, 11, PRETO); px(grade, 9, 11, PRETO);
+  };
 }
 
 // ---------- categorias ----------
 const CATEGORIAS = [
-  { slug: 'fundo', name: 'Fundo', tipo: 'visual', camada: 0, posicao: 1 },
-  { slug: 'asas', name: 'Asas', tipo: 'visual', camada: 10, posicao: 2 },
-  { slug: 'corpo', name: 'Corpo', tipo: 'visual', camada: 20, posicao: 3 },
-  { slug: 'tom_pele', name: 'Tom de pele', tipo: 'cor', camada: 21, posicao: 4 },
-  { slug: 'calca', name: 'Calças', tipo: 'visual', camada: 22, posicao: 5 },
-  { slug: 'shorts', name: 'Shorts', tipo: 'visual', camada: 23, posicao: 6 },
-  { slug: 'tenis', name: 'Tênis', tipo: 'visual', camada: 24, posicao: 7 },
-  { slug: 'camiseta', name: 'Camisetas', tipo: 'visual', camada: 25, posicao: 8 },
-  { slug: 'moletom', name: 'Moletons', tipo: 'visual', camada: 26, posicao: 9 },
-  { slug: 'jaqueta', name: 'Jaquetas', tipo: 'visual', camada: 27, posicao: 10 },
-  { slug: 'corrente', name: 'Correntes', tipo: 'visual', camada: 28, posicao: 11 },
-  { slug: 'cabelo', name: 'Cabelo', tipo: 'visual', camada: 29, posicao: 12 },
-  { slug: 'olhos', name: 'Olhos', tipo: 'visual', camada: 30, posicao: 13 },
-  { slug: 'boca', name: 'Boca', tipo: 'visual', camada: 31, posicao: 14 },
-  { slug: 'brinco', name: 'Brincos', tipo: 'visual', camada: 32, posicao: 15 },
-  { slug: 'oculos', name: 'Óculos', tipo: 'visual', camada: 33, posicao: 16 },
-  { slug: 'bone', name: 'Bonés', tipo: 'visual', camada: 34, posicao: 17 },
-  { slug: 'acessorio', name: 'Outros acessórios', tipo: 'visual', camada: 35, posicao: 18 },
-  { slug: 'moldura', name: 'Moldura', tipo: 'visual', camada: 100, posicao: 19 },
+  { slug: 'corpo', name: 'Corpo', tipo: 'visual', camada: 10, posicao: 1 },
+  { slug: 'tom_pele', name: 'Tom de pele', tipo: 'cor', camada: 11, posicao: 2 },
+  { slug: 'olhos', name: 'Olhos', tipo: 'visual', camada: 20, posicao: 3 },
+  { slug: 'barba', name: 'Barba', tipo: 'visual', camada: 25, posicao: 4 },
+  { slug: 'cor_cabelo', name: 'Cor do cabelo', tipo: 'cor', camada: 29, posicao: 5 },
+  { slug: 'cabelo', name: 'Cabelo', tipo: 'visual', camada: 30, posicao: 6 },
+  { slug: 'roupa', name: 'Roupa', tipo: 'visual', camada: 40, posicao: 7 },
+  { slug: 'chapeu', name: 'Chapéus e bonés', tipo: 'visual', camada: 50, posicao: 8 },
+  { slug: 'acessorio', name: 'Acessórios', tipo: 'visual', camada: 60, posicao: 9 },
+  { slug: 'item_especial', name: 'Item especial', tipo: 'visual', camada: 70, posicao: 10 },
 ];
 
-// ---------- itens ----------
-// { categoria, slug, name, asset, raridade?, posicao? }
-const ITENS = [
-  // corpo — três porportes, todas com pescoço/pernas/cabeça no mesmo lugar
-  { categoria: 'corpo', slug: 'esguio', name: 'Esguio', asset: corpo(26, 10), posicao: 1 },
-  { categoria: 'corpo', slug: 'medio', name: 'Médio', asset: corpo(32, 12), posicao: 2 },
-  { categoria: 'corpo', slug: 'robusto', name: 'Robusto', asset: corpo(40, 15), posicao: 3 },
+const ITENS = [];
+let seq = 0;
+function add(categoria, slug, name, desenhar, extra = {}) {
+  seq += 1;
+  ITENS.push({ categoria, slug, name, asset: item(desenhar), posicao: extra.posicao ?? seq, raridade: extra.raridade });
+}
+function addCor(categoria, slug, name, cor, extra = {}) {
+  seq += 1;
+  ITENS.push({ categoria, slug, name, asset: cor, posicao: extra.posicao ?? seq, raridade: extra.raridade });
+}
 
-  // tom de pele — itens "cor": o asset é o próprio valor de cor
-  { categoria: 'tom_pele', slug: 'clara', name: 'Clara', asset: '#f2c9a0', posicao: 1 },
-  { categoria: 'tom_pele', slug: 'media', name: 'Média', asset: '#d9a066', posicao: 2 },
-  { categoria: 'tom_pele', slug: 'morena', name: 'Morena', asset: '#b97a4a', posicao: 3 },
-  { categoria: 'tom_pele', slug: 'escura', name: 'Escura', asset: '#7a4a2b', posicao: 4 },
-  { categoria: 'tom_pele', slug: 'bem_escura', name: 'Bem escura', asset: '#4a2e1c', posicao: 5 },
-  { categoria: 'tom_pele', slug: 'verde', name: 'Verde (edição bonde)', asset: '#7bc47f', raridade: 'raro', posicao: 6 },
+// ---------- corpo: 3 físicos ----------
+add('corpo', 'magro', 'Magro', corpoBase(3, 2));
+add('corpo', 'medio', 'Médio', corpoBase(4, 2));
+add('corpo', 'robusto', 'Robusto', corpoBase(5, 3));
 
-  // cabelo
-  {
-    categoria: 'cabelo', slug: 'moicano_verde', name: 'Moicano verde', posicao: 1,
-    asset: `<path d="M91 40 L95 10 L100 2 L105 10 L109 40 Z" fill="#5ede7c"/>`,
-  },
-  {
-    categoria: 'cabelo', slug: 'moicano_rosa', name: 'Moicano rosa', posicao: 2,
-    asset: `<path d="M91 40 L95 10 L100 2 L105 10 L109 40 Z" fill="#f472b6"/>`,
-  },
-  {
-    categoria: 'cabelo', slug: 'afro_roxo', name: 'Afro roxo', posicao: 3,
-    asset: circ(100, 42, 36, '#a78bfa'),
-  },
-  {
-    categoria: 'cabelo', slug: 'liso_preto', name: 'Liso preto', posicao: 4,
-    asset: `${ret(66, 18, 68, 48, 30, '#1a1a1a')}${ret(63, 46, 11, 56, 5, '#1a1a1a')}${ret(126, 46, 11, 56, 5, '#1a1a1a')}`,
-  },
-  {
-    categoria: 'cabelo', slug: 'careca', name: 'Careca', posicao: 5,
-    asset: `<path d="M70 38 A30 30 0 0 1 130 38" stroke="#2a2a2a" stroke-width="3" fill="none" opacity="0.55"/>`,
-  },
-  {
-    categoria: 'cabelo', slug: 'trancas_azul', name: 'Tranças azul', posicao: 6,
-    asset: `${ret(72, 20, 56, 24, 14, '#5aa9f8')}${ret(67, 40, 10, 92, 5, '#5aa9f8')}${ret(123, 40, 10, 92, 5, '#5aa9f8')}`,
-  },
+// ---------- tom de pele ----------
+addCor('tom_pele', 'clara', 'Clara', '#f2c9a0');
+addCor('tom_pele', 'media', 'Média', '#e0a978');
+addCor('tom_pele', 'dourada', 'Dourada', '#d9a066');
+addCor('tom_pele', 'morena', 'Morena', '#b97a4a');
+addCor('tom_pele', 'escura', 'Escura', '#7a4a2b');
+addCor('tom_pele', 'bem_escura', 'Bem escura', '#4a2e1c');
+addCor('tom_pele', 'verde', 'Verde (edição bonde)', '#7bc47f', { raridade: 'raro' });
 
-  // olhos
-  {
-    categoria: 'olhos', slug: 'tranquilo', name: 'Tranquilo', posicao: 1,
-    asset: `${elipse(86, 52, 6, 4, '#1a1a1a')}${elipse(114, 52, 6, 4, '#1a1a1a')}`,
-  },
-  {
-    categoria: 'olhos', slug: 'suave', name: 'Suave (de leve vermelhinho)', posicao: 2,
-    asset: `${ret(80, 51, 12, 3, 2, '#1a1a1a')}${ret(108, 51, 12, 3, 2, '#1a1a1a')}${elipse(86, 56, 7, 3, '#e0393e', 0.3)}${elipse(114, 56, 7, 3, '#e0393e', 0.3)}`,
-  },
-  {
-    categoria: 'olhos', slug: 'determinado', name: 'Determinado', posicao: 3,
-    asset: `<path d="M78 47 L94 52 L78 55 Z" fill="#1a1a1a"/><path d="M122 47 L106 52 L122 55 Z" fill="#1a1a1a"/>`,
-  },
-  {
-    categoria: 'olhos', slug: 'brilhante', name: 'Brilhante', posicao: 4,
-    asset: `${circ(86, 52, 6, '#1a1a1a')}${circ(88, 50, 2, '#fff')}${circ(114, 52, 6, '#1a1a1a')}${circ(116, 50, 2, '#fff')}`,
-  },
+// ---------- olhos (desenhados sem contorno próprio — já ficam sobre a
+// cabeça, que tem contorno; olho com contorno duplo ia sujar o rosto) ----------
+function olhoSimples(desenhar) {
+  return (grade) => desenhar(grade);
+}
+add('olhos', 'tranquilo', 'Tranquilo', olhoSimples((g) => {
+  px(g, 6, 7, PRETO); px(g, 7, 7, PRETO);
+  espelhar(g);
+}), {});
+add('olhos', 'grande', 'Grande e atento', olhoSimples((g) => {
+  ret(g, 5, 6, 2, 2, PRETO);
+  espelhar(g);
+}));
+add('olhos', 'feliz', 'Feliz (fechadinho)', olhoSimples((g) => {
+  px(g, 5, 7, PRETO); px(g, 6, 6, PRETO); px(g, 7, 7, PRETO);
+  espelhar(g);
+}));
+add('olhos', 'serio', 'Sério', olhoSimples((g) => {
+  ret(g, 5, 7, 3, 1, PRETO);
+  ret(g, 5, 6, 1, 1, PRETO);
+  espelhar(g);
+}));
+add('olhos', 'brilhante', 'Brilhante', olhoSimples((g) => {
+  ret(g, 5, 6, 2, 2, PRETO);
+  px(g, 6, 6, '#f4f1ea');
+  espelhar(g);
+}));
+add('olhos', 'sonolento', 'Sonolento (vermelhinho)', olhoSimples((g) => {
+  ret(g, 5, 7, 2, 1, PRETO);
+  px(g, 5, 8, '#e0393e');
+  espelhar(g);
+}));
+add('olhos', 'coracao', 'Apaixonado', olhoSimples((g) => {
+  px(g, 5, 6, '#f0555a'); px(g, 7, 6, '#f0555a');
+  px(g, 6, 7, '#f0555a');
+  espelhar(g);
+}), { raridade: 'raro' });
 
-  // boca
-  { categoria: 'boca', slug: 'sorriso', name: 'Sorriso tranquilo', posicao: 1, asset: linha('M88 68 Q100 76 112 68', '#1a1a1a', 3) },
-  {
-    categoria: 'boca', slug: 'largo', name: 'Sorriso largo', posicao: 2,
-    asset: `<path d="M85 66 Q100 82 115 66 Q100 73 85 66 Z" fill="#1a1a1a"/>${ret(94, 68, 12, 4, 2, '#fff')}`,
-  },
-  { categoria: 'boca', slug: 'seria', name: 'Séria', posicao: 3, asset: ret(90, 70, 20, 3, 1.5, '#1a1a1a') },
-  {
-    categoria: 'boca', slug: 'lingua', name: 'Língua de fora', posicao: 4,
-    asset: `${linha('M86 66 Q100 74 114 66', '#1a1a1a', 3)}${ret(96, 72, 8, 12, 4, '#e0708a')}`,
-  },
+// ---------- barba (sobre o queixo, embaixo da boca) ----------
+// peças pequenas ficam dominadas pelo próprio contorno se forem pequenas
+// demais (o contorno automático come quase toda a área) — por isso essas
+// são um pouco maiores do que pareceria necessário para uma barba.
+add('barba', 'cavanhaque', 'Cavanhaque', (g) => {
+  ret(g, 7, 11, 4, 3, '#241a15');
+});
+add('barba', 'cheia', 'Cheia', (g) => {
+  ret(g, 4, 9, 4, 4, '#241a15');
+  ret(g, 7, 11, 4, 3, '#241a15');
+  espelhar(g);
+});
+add('barba', 'cavanhaque_ruivo', 'Cavanhaque ruivo', (g) => {
+  ret(g, 7, 11, 4, 3, '#a5502a');
+});
+add('barba', 'grisalha', 'Grisalha', (g) => {
+  ret(g, 4, 9, 4, 4, '#c9c4bd');
+  ret(g, 7, 11, 4, 3, '#c9c4bd');
+  espelhar(g);
+});
+add('barba', 'bigode', 'Bigode', (g) => {
+  ret(g, 6, 9, 3, 2, '#241a15');
+  espelhar(g);
+});
 
-  // camisetas (manga curta)
-  {
-    categoria: 'camiseta', slug: 'branca', name: 'Branca lisa', posicao: 1,
-    asset: `${ret(40, 98, 26, 32, 12, '#f2f7f4')}${ret(134, 98, 26, 32, 12, '#f2f7f4')}${ret(58, 94, 84, 66, 16, '#f2f7f4')}`,
-  },
-  {
-    categoria: 'camiseta', slug: 'folha', name: 'Estampa de folha', posicao: 2,
-    asset: `${ret(40, 98, 26, 32, 12, '#161f1a')}${ret(134, 98, 26, 32, 12, '#161f1a')}${ret(58, 94, 84, 66, 16, '#161f1a')}<g transform="translate(100 118) scale(0.9)" fill="#5ede7c"><use href="#folha-maconha"/></g>`,
-  },
-  {
-    categoria: 'camiseta', slug: 'listrada', name: 'Listrada', posicao: 3,
-    asset: `${ret(40, 98, 26, 32, 12, '#f2f7f4')}${ret(134, 98, 26, 32, 12, '#f2f7f4')}${ret(58, 94, 84, 66, 16, '#f2f7f4')}${ret(58, 104, 84, 8, 0, '#f0555a')}${ret(58, 122, 84, 8, 0, '#f0555a')}${ret(58, 140, 84, 8, 0, '#f0555a')}`,
-  },
+// ---------- cor do cabelo (separada do estilo, mesmo esquema do tom de
+// pele — assim 10 estilos x 7 cores já são 70 combinações só nessa dupla) ----------
+addCor('cor_cabelo', 'preto', 'Preto', '#241a15');
+addCor('cor_cabelo', 'castanho', 'Castanho', '#5b3a24');
+addCor('cor_cabelo', 'loiro', 'Loiro', '#e8c873');
+addCor('cor_cabelo', 'ruivo', 'Ruivo', '#c2622f');
+addCor('cor_cabelo', 'grisalho', 'Grisalho', '#c9c4bd');
+addCor('cor_cabelo', 'verde', 'Verde', '#5ede7c', { raridade: 'raro' });
+addCor('cor_cabelo', 'rosa', 'Rosa', '#f472b6', { raridade: 'raro' });
+addCor('cor_cabelo', 'azul', 'Azul', '#5aa9f8', { raridade: 'raro' });
+addCor('cor_cabelo', 'roxo', 'Roxo', '#a78bfa', { raridade: 'raro' });
 
-  // moletons (manga longa + capuz)
-  {
-    categoria: 'moletom', slug: 'cinza', name: 'Cinza', posicao: 1,
-    asset: `${ret(96, 88, 8, 14, 3, '#3a4048')}${ret(38, 98, 28, 62, 13, '#4a525c')}${ret(134, 98, 28, 62, 13, '#4a525c')}${ret(56, 94, 88, 78, 18, '#4a525c')}`,
-  },
-  {
-    categoria: 'moletom', slug: 'verde_militar', name: 'Verde militar', posicao: 2,
-    asset: `${ret(96, 88, 8, 14, 3, '#3d4a34')}${ret(38, 98, 28, 62, 13, '#4f5f3f')}${ret(134, 98, 28, 62, 13, '#4f5f3f')}${ret(56, 94, 88, 78, 18, '#4f5f3f')}`,
-  },
+// ---------- cabelo (10 estilos, cor própria via {{cabelo}}) ----------
+//
+// Regra de silhueta pra não estourar por cima da cabeça nem tapar o rosto:
+// a "touca" de cabelo (linhas cheias, de orelha a orelha) só pinta até a
+// linha 4 — a cabeça (círculo cy=7 r=6.4) só começa a ficar larga de
+// verdade a partir da linha 5, e os olhos moram na linha 7. Costeleta é
+// sempre uma tira fina do lado de fora (x 2–4), nunca uma linha cheia, pra
+// não cobrir o rosto por baixo da linha 4.
+function costeleta(g, y0, altura, cor = CABELO) {
+  ret(g, 3, y0, 2, altura, cor);
+}
 
-  // jaquetas (manga longa + gola + "zíper")
-  {
-    categoria: 'jaqueta', slug: 'jeans', name: 'Jaqueta jeans', posicao: 1,
-    asset: `${ret(38, 98, 28, 62, 13, '#4a6fa5')}${ret(134, 98, 28, 62, 13, '#4a6fa5')}${ret(56, 94, 88, 78, 18, '#5b81b8')}${ret(98, 96, 4, 74, 0, '#2f4a75', 0.6)}${ret(60, 98, 12, 10, 3, '#2f4a75', 0.5)}`,
-  },
-  {
-    categoria: 'jaqueta', slug: 'bomber', name: 'Bomber preta', posicao: 2,
-    asset: `${ret(38, 148, 28, 14, 6, '#111')}${ret(134, 148, 28, 14, 6, '#111')}${ret(38, 98, 28, 54, 12, '#1c1c1c')}${ret(134, 98, 28, 54, 12, '#1c1c1c')}${ret(56, 94, 88, 78, 18, '#1c1c1c')}${ret(56, 94, 88, 12, 6, '#2c2c2c')}`,
-  },
+add('cabelo', 'curto', 'Curto', (g) => {
+  touca(g, [[0, 2], [1, 4], [2, 5.5], [3, 6.4], [4, 6.6]], CABELO);
+  costeleta(g, 5, 3);
+  espelhar(g);
+});
+add('cabelo', 'moicano', 'Moicano', (g) => {
+  ret(g, 9, -2, 2, 8, CABELO);
+  ret(g, 8, 5, 1, 1, CABELO_SOMBRA);
+  espelhar(g);
+});
+add('cabelo', 'afro', 'Black power', (g) => {
+  touca(g, [[-2, 5], [-1, 7], [0, 8.5], [1, 9], [2, 9], [3, 8.6], [4, 8]], CABELO);
+  espelhar(g);
+});
+add('cabelo', 'longo_liso', 'Longo liso', (g) => {
+  touca(g, [[0, 2], [1, 4], [2, 5.5], [3, 6.4], [4, 6.6]], CABELO);
+  ret(g, 2, 5, 2, 15, CABELO);
+  ret(g, 3, 5, 1, 8, CABELO_SOMBRA);
+  espelhar(g);
+});
+add('cabelo', 'topete', 'Topete', (g) => {
+  touca(g, [[0, 3.4], [1, 3.2], [2, 2.6]], CABELO);
+  costeleta(g, 3, 5);
+  espelhar(g);
+});
+add('cabelo', 'trancas', 'Tranças', (g) => {
+  touca(g, [[0, 2], [1, 4], [2, 5.5], [3, 6.4], [4, 6.6]], CABELO);
+  ret(g, 1, 5, 2, 17, CABELO);
+  ret(g, 2, 5, 1, 17, CABELO_SOMBRA);
+  espelhar(g);
+});
+add('cabelo', 'careca', 'Careca', (g) => {
+  ret(g, 5, 5, 1, 1, PELE_SOMBRA);
+  espelhar(g);
+});
+add('cabelo', 'coque', 'Coque', (g) => {
+  touca(g, [[0, 2], [1, 4], [2, 5.5], [3, 6.4], [4, 6.6]], CABELO);
+  costeleta(g, 5, 3);
+  circulo(g, 9.5, -1, 2.2, CABELO);
+  espelhar(g);
+});
+add('cabelo', 'espetado', 'Espetado', (g) => {
+  touca(g, [[2, 5], [3, 6]], CABELO);
+  diagonal(g, 6, 2, 4, -2, CABELO, 2);
+  diagonal(g, 9, 1, 9, -3, CABELO, 2);
+  espelhar(g);
+});
+add('cabelo', 'ondulado', 'Ondulado', (g) => {
+  touca(g, [[0, 2], [1, 4], [2, 5.7], [3, 6.6], [4, 6.8]], CABELO);
+  costeleta(g, 5, 4);
+  px(g, 2, 9, CABELO); px(g, 1, 10, CABELO);
+  espelhar(g);
+});
 
-  // calças
-  {
-    categoria: 'calca', slug: 'jeans', name: 'Jeans', posicao: 1,
-    asset: `${ret(80, 168, 17, 58, 6, '#3b5a86')}${ret(103, 168, 17, 58, 6, '#3b5a86')}`,
-  },
-  {
-    categoria: 'calca', slug: 'cargo', name: 'Cargo', posicao: 2,
-    asset: `${ret(80, 168, 17, 58, 6, '#5b5a3f')}${ret(103, 168, 17, 58, 6, '#5b5a3f')}${ret(78, 196, 12, 12, 3, '#4a4933')}${ret(110, 196, 12, 12, 3, '#4a4933')}`,
-  },
+// ---------- roupa (10 estilos) ----------
+function camisa(cor, sombra, mangaLonga) {
+  return (g) => {
+    ret(g, 6, 14, 4, 8, cor);
+    ret(g, 6, 21, 4, 1, sombra);
+    ret(g, mangaLonga ? 3 : 4, 16, mangaLonga ? 3 : 2, mangaLonga ? 6 : 3, cor);
+    espelhar(g);
+  };
+}
+add('roupa', 'camiseta_branca', 'Camiseta branca', camisa('#f2f7f4', '#c9d2cc', false));
+add('roupa', 'camiseta_verde', 'Camiseta verde', camisa('#2fae62', '#227d47', false));
+add('roupa', 'camiseta_preta', 'Camiseta preta', camisa('#232323', '#141414', false));
+add('roupa', 'regata', 'Regata', (g) => {
+  ret(g, 6, 14, 4, 8, '#f0555a');
+  ret(g, 6, 21, 4, 1, '#c23a3f');
+  espelhar(g);
+});
+add('roupa', 'moletom_cinza', 'Moletom com capuz', (g) => {
+  ret(g, 6, 13, 4, 9, '#5a6470');
+  ret(g, 3, 15, 3, 7, '#5a6470');
+  ret(g, 8, 12, 2, 2, '#3f4750');
+  espelhar(g);
+});
+add('roupa', 'jaqueta_jeans', 'Jaqueta jeans', (g) => {
+  ret(g, 6, 14, 4, 8, '#4a6fa5');
+  ret(g, 3, 16, 3, 6, '#4a6fa5');
+  linhaV(g, 9, 14, 8, '#2f4a75');
+  espelhar(g);
+});
+add('roupa', 'jaqueta_bomber', 'Bomber preta', (g) => {
+  ret(g, 6, 14, 4, 7, '#1c1c1c');
+  ret(g, 6, 21, 4, 1, '#000');
+  ret(g, 3, 16, 3, 6, '#1c1c1c');
+  ret(g, 6, 13, 4, 1, '#e0393e');
+  espelhar(g);
+});
+add('roupa', 'colete', 'Colete xadrez', (g) => {
+  ret(g, 6, 14, 4, 8, '#7a4a2b');
+  ret(g, 4, 16, 2, 6, PELE); // braço fica de fora
+  px(g, 7, 16, '#5b3a24'); px(g, 8, 18, '#5b3a24');
+  espelhar(g);
+});
+add('roupa', 'estampa_folha', 'Estampa de folha', (g) => {
+  ret(g, 6, 14, 4, 8, '#161f1a');
+  ret(g, 4, 16, 2, 3, '#161f1a');
+  ret(g, 8, 16, 2, 3, '#5ede7c');
+  px(g, 9, 15, '#5ede7c'); px(g, 8, 18, '#5ede7c');
+  espelhar(g);
+});
+add('roupa', 'terno', 'Terno', (g) => {
+  ret(g, 6, 14, 4, 8, '#232838');
+  ret(g, 3, 16, 3, 6, '#232838');
+  ret(g, 8, 14, 2, 6, '#f2f7f4');
+  linhaV(g, 9, 14, 6, '#c23a3f');
+  espelhar(g);
+}, { raridade: 'raro' });
 
-  // shorts
-  {
-    categoria: 'shorts', slug: 'jeans', name: 'Jeans curto', posicao: 1,
-    asset: `${ret(80, 168, 17, 30, 6, '#4a6fa5')}${ret(103, 168, 17, 30, 6, '#4a6fa5')}`,
-  },
-  {
-    categoria: 'shorts', slug: 'moletom', name: 'Moletom curto', posicao: 2,
-    asset: `${ret(80, 168, 17, 32, 6, '#4a525c')}${ret(103, 168, 17, 32, 6, '#4a525c')}`,
-  },
+// ---------- chapéus e bonés (8 estilos, desenhados por cima do cabelo) ----------
+// mesma lógica do cabelo: a touca desce até a linha 4 SEMPRE cheia (sem
+// nenhum pedaço isolado/flutuante) — um retângulo solto dentro da grade do
+// item vira contorno preto nas bordas dele mesmo, e esse contorno cobre o
+// que tiver por baixo (cabelo) numa faixa inteira. Detalhe de aba/sombra
+// só é seguro se estiver DENTRO da área já pintada, nunca fora dela.
+function bandaBone(cor, corSombra) {
+  return (g) => {
+    touca(g, [[-1, 4], [0, 5.5], [1, 6.6], [2, 7], [3, 7.1], [4, 7.1]], cor);
+    ret(g, 9, 4, 2, 1, corSombra);
+    espelhar(g);
+  };
+}
+add('chapeu', 'bone_verde', 'Boné verde', bandaBone('#2fae62', '#227d47'));
+add('chapeu', 'bone_preto', 'Boné preto', bandaBone('#1a1a1a', '#000'));
+add('chapeu', 'bone_lado', 'Boné de lado', (g) => {
+  touca(g, [[-1, 4], [0, 5.5], [1, 6.6], [2, 7], [3, 7.1], [4, 7.1]], '#c22c31');
+  ret(g, 1, 3, 3, 3, '#8f1f24'); // aba de lado, saindo pela lateral já coberta
+  espelhar(g);
+}, { raridade: 'raro' });
+add('chapeu', 'gorro', 'Gorro', (g) => {
+  touca(g, [[-2, 3], [-1, 5.5], [0, 6.8], [1, 7.2], [2, 7.3], [3, 7.3], [4, 7.3]], '#c22c31');
+  ret(g, 9, 4, 2, 1, '#8f1f24');
+  circulo(g, 9.5, -3, 1.6, '#f2f7f4');
+  espelhar(g);
+});
+add('chapeu', 'chapeu_praia', 'Chapéu de palha', (g) => {
+  touca(g, [[-1, 8.5], [0, 9.5], [1, 9.5], [2, 4]], '#d9a066');
+  touca(g, [[-2, 3.4], [-1, 5]], '#e0b57e');
+  espelhar(g);
+});
+add('chapeu', 'cartola', 'Cartola', (g) => {
+  ret(g, 4, -2, 12, 8, '#151515');
+  ret(g, 1, 4, 18, 2, '#151515');
+  ret(g, 4, 4, 12, 1, '#c22c31');
+}, { raridade: 'epico' });
+add('chapeu', 'coroa', 'Coroa', (g) => {
+  ret(g, 3, 2, 14, 3, '#f3c24d');
+  px(g, 3, 0, '#f3c24d'); px(g, 8, -1, '#f3c24d'); px(g, 11, -1, '#f3c24d');
+  espelhar(g);
+}, { raridade: 'lendario' });
+add('chapeu', 'headset', 'Headset', (g) => {
+  ret(g, 3, 3, 1, 6, '#232323');
+  ret(g, 2, 5, 3, 3, '#e0393e');
+  espelhar(g);
+});
 
-  // tênis
-  {
-    categoria: 'tenis', slug: 'branco', name: 'Branco clássico', posicao: 1,
-    asset: `${ret(77, 213, 21, 15, 6, '#f2f7f4')}${ret(102, 213, 21, 15, 6, '#f2f7f4')}${ret(77, 224, 21, 5, 2, '#c9d2cc')}${ret(102, 224, 21, 5, 2, '#c9d2cc')}`,
-  },
-  {
-    categoria: 'tenis', slug: 'preto', name: 'Preto street', posicao: 2,
-    asset: `${ret(77, 213, 21, 15, 6, '#161616')}${ret(102, 213, 21, 15, 6, '#161616')}${ret(77, 224, 21, 5, 2, '#3a3a3a')}${ret(102, 224, 21, 5, 2, '#3a3a3a')}`,
-  },
-  {
-    categoria: 'tenis', slug: 'colorido', name: 'Color block', posicao: 3,
-    asset: `${ret(77, 213, 21, 15, 6, '#f2f7f4')}${ret(102, 213, 21, 15, 6, '#f2f7f4')}${ret(77, 213, 21, 7, 6, '#f0555a')}${ret(102, 213, 21, 7, 6, '#5aa9f8')}`,
-  },
+// ---------- acessórios (10 — óculos, máscaras, joias, itens temáticos) ----------
+add('acessorio', 'oculos_sol', 'Óculos de sol', (g) => {
+  ret(g, 4, 6, 3, 2, '#111');
+  ret(g, 9, 6, 1, 1, '#111');
+  espelhar(g);
+}, {});
+add('acessorio', 'oculos_redondo', 'Óculos redondo', (g) => {
+  ret(g, 4, 6, 3, 2, PRETO);
+  px(g, 5, 7, '#5aa9f8');
+  espelhar(g);
+});
+add('acessorio', 'mascara_cirurgica', 'Máscara', (g) => {
+  ret(g, 5, 9, 4, 3, '#f2f7f4');
+  espelhar(g);
+});
+add('acessorio', 'mascara_caveira', 'Máscara caveira', (g) => {
+  ret(g, 4, 8, 5, 5, '#f2f7f4');
+  px(g, 5, 9, PRETO); px(g, 7, 9, PRETO);
+  espelhar(g);
+}, { raridade: 'epico' });
+add('acessorio', 'corrente_prata', 'Corrente de prata', (g) => {
+  ret(g, 8, 13, 4, 1, '#c7ced4');
+  px(g, 9, 14, '#c7ced4');
+  espelhar(g);
+});
+add('acessorio', 'corrente_ouro', 'Corrente de ouro', (g) => {
+  ret(g, 7, 13, 6, 1, '#f3c24d');
+  ret(g, 8, 14, 4, 1, '#f3c24d');
+  espelhar(g);
+}, { raridade: 'raro' });
+add('acessorio', 'brinco', 'Brinco de argola', (g) => {
+  px(g, 3, 9, '#f3c24d'); px(g, 3, 10, '#f3c24d');
+  espelhar(g);
+});
+add('acessorio', 'cigarro_de_erva', 'Beck aceso', (g) => {
+  diagonal(g, 5, 10, 2, 12, '#f2f7f4', 1);
+  px(g, 1, 12, '#e0393e');
+}, { raridade: 'raro' });
+add('acessorio', 'cachimbo', 'Cachimbo', (g) => {
+  diagonal(g, 5, 11, 3, 12, '#5b3a24', 1);
+  ret(g, 1, 11, 2, 2, '#5b3a24');
+}, { raridade: 'raro' });
+add('acessorio', 'bandana', 'Bandana', (g) => {
+  ret(g, 3, 4, 14, 2, '#c22c31');
+  px(g, 2, 6, '#c22c31'); px(g, 17, 6, '#c22c31');
+});
 
-  // bonés
-  {
-    categoria: 'bone', slug: 'verde', name: 'Boné verde', posicao: 1,
-    asset: `${circ(100, 32, 30, '#2fae62')}${ret(96, 4, 8, 30, 4, '#2fae62')}${elipse(126, 40, 20, 7, '#227d47')}`,
-  },
-  {
-    categoria: 'bone', slug: 'preto', name: 'Boné preto', posicao: 2,
-    asset: `${circ(100, 32, 30, '#1a1a1a')}${ret(96, 4, 8, 30, 4, '#1a1a1a')}${elipse(126, 40, 20, 7, '#000')}`,
-  },
-  {
-    categoria: 'bone', slug: 'gorro', name: 'Gorro', posicao: 3,
-    asset: `${circ(100, 30, 32, '#c22c31')}${ret(68, 44, 64, 12, 6, '#f2f7f4')}${circ(100, 6, 7, '#f2f7f4')}`,
-  },
-
-  // óculos
-  {
-    categoria: 'oculos', slug: 'sol', name: 'De sol', posicao: 1,
-    asset: `${ret(76, 46, 20, 12, 5, '#111')}${ret(104, 46, 20, 12, 5, '#111')}${ret(96, 50, 8, 3, 1, '#111')}`,
-  },
-  {
-    categoria: 'oculos', slug: 'redondo', name: 'Redondo', posicao: 2,
-    asset: `${anel(86, 52, 10, '#1a1a1a', 2.5)}${anel(114, 52, 10, '#1a1a1a', 2.5)}${linha('M96 52 L104 52', '#1a1a1a', 2.5)}`,
-  },
-
-  // correntes
-  {
-    categoria: 'corrente', slug: 'prata', name: 'Prata simples', posicao: 1,
-    asset: `<path d="M84 96 Q100 112 116 96" stroke="#c7ced4" stroke-width="3" fill="none"/>`,
-  },
-  {
-    categoria: 'corrente', slug: 'ouro', name: 'Ouro grossa', posicao: 2, raridade: 'raro',
-    asset: `<path d="M82 96 Q100 116 118 96" stroke="#f3c24d" stroke-width="5" fill="none"/>${circ(100, 116, 6, '#f3c24d')}`,
-  },
-
-  // brincos
-  { categoria: 'brinco', slug: 'argola', name: 'Argola', posicao: 1, asset: `${anel(70, 58, 4, '#f3c24d', 2)}${anel(130, 58, 4, '#f3c24d', 2)}` },
-  { categoria: 'brinco', slug: 'ponto', name: 'Ponto de luz', posicao: 2, asset: `${circ(70, 58, 2.5, '#5aa9f8')}${circ(130, 58, 2.5, '#5aa9f8')}` },
-
-  // outros acessórios (bichinho de estimação, bolsa — sempre "na frente")
-  {
-    categoria: 'acessorio', slug: 'gato', name: 'Gato de estimação', posicao: 1, raridade: 'raro',
-    asset: `${elipse(168, 214, 18, 13, '#4a4a4a')}${circ(180, 196, 10, '#4a4a4a')}<path d="M172 190 L175 180 L179 191 Z" fill="#4a4a4a"/><path d="M184 190 L188 180 L191 191 Z" fill="#4a4a4a"/>${circ(184, 195, 1.6, '#eaeaea')}<path d="M152 220 Q140 210 148 200" stroke="#4a4a4a" stroke-width="3" fill="none"/>`,
-  },
-  {
-    categoria: 'acessorio', slug: 'cachorro', name: 'Cachorro de estimação', posicao: 2, raridade: 'raro',
-    asset: `${elipse(168, 215, 19, 14, '#b4813f')}${circ(182, 197, 11, '#b4813f')}<path d="M174 190 Q168 182 174 178 Q180 184 178 191 Z" fill="#8a5f2b"/><path d="M190 190 Q196 182 191 178 Q186 184 187 191 Z" fill="#8a5f2b"/>${circ(186, 196, 1.6, '#2a2a2a')}`,
-  },
-  {
-    categoria: 'acessorio', slug: 'bolsa', name: 'Bolsa transversal', posicao: 3,
-    asset: `${ret(60, 96, 10, 78, 4, '#5b3a24')}<path d="M60 96 L140 168 L136 176 L56 104 Z" fill="#5b3a24"/>${ret(118, 150, 26, 24, 6, '#7a5236')}`,
-  },
-
-  // asas (atrás do corpo)
-  {
-    categoria: 'asas', slug: 'anjo', name: 'Anjo', posicao: 1, raridade: 'raro',
-    asset: `<path d="M62 96 Q10 100 6 150 Q34 140 50 160 Q40 120 62 96 Z" fill="#f2f7f4"/><path d="M138 96 Q190 100 194 150 Q166 140 150 160 Q160 120 138 96 Z" fill="#f2f7f4"/>`,
-  },
-  {
-    categoria: 'asas', slug: 'dragao', name: 'Dragão', posicao: 2, raridade: 'epico',
-    asset: `<path d="M64 100 Q4 96 2 132 Q28 118 40 132 Q20 140 10 160 Q46 152 64 130 Z" fill="#8a2530"/><path d="M136 100 Q196 96 198 132 Q172 118 160 132 Q180 140 190 160 Q154 152 136 130 Z" fill="#8a2530"/>`,
-  },
-
-  // fundos (sem gradiente/id — só formas planas sobrepostas)
-  {
-    categoria: 'fundo', slug: 'verde', name: 'Verde', posicao: 1,
-    asset: `${ret(0, 0, 200, 240, 0, '#122117')}${circ(150, 60, 70, '#1d3a26', 0.7)}${circ(30, 190, 60, '#0d1a12', 0.6)}`,
-  },
-  {
-    categoria: 'fundo', slug: 'roxo', name: 'Roxo', posicao: 2,
-    asset: `${ret(0, 0, 200, 240, 0, '#1c1730')}${circ(150, 60, 70, '#2c2350', 0.7)}${circ(30, 190, 60, '#120e22', 0.6)}`,
-  },
-  {
-    categoria: 'fundo', slug: 'grade', name: 'Grade retrô', posicao: 3,
-    asset: `${ret(0, 0, 200, 240, 0, '#160f22')}${ret(0, 150, 200, 90, 0, '#2a1840')}${linha('M0 165 L200 165', '#e0393e', 1.5)}${linha('M0 182 L200 182', '#e0393e', 1.2, 'butt')}${linha('M0 202 L200 202', '#e0393e', 1, 'butt')}${linha('M0 226 L200 226', '#e0393e', 0.8, 'butt')}`,
-  },
-  {
-    categoria: 'fundo', slug: 'folhas', name: 'Folhas flutuantes', posicao: 4,
-    asset: `${ret(0, 0, 200, 240, 0, '#0f1a13')}<g transform="translate(40 50) scale(0.5)" fill="#5ede7c" opacity="0.5"><use href="#folha-maconha"/></g><g transform="translate(165 90) rotate(30) scale(0.35)" fill="#5ede7c" opacity="0.4"><use href="#folha-maconha"/></g><g transform="translate(30 190) rotate(-20) scale(0.4)" fill="#5ede7c" opacity="0.35"><use href="#folha-maconha"/></g>`,
-  },
-
-  // molduras (sempre por cima, só contorno — não pode tapar o personagem)
-  {
-    categoria: 'moldura', slug: 'neon', name: 'Neon verde', posicao: 1,
-    asset: `${ret(4, 4, 192, 232, 18, 'none')}<rect x="5" y="5" width="190" height="230" rx="18" fill="none" stroke="#5ede7c" stroke-width="4"/><rect x="10" y="10" width="180" height="220" rx="14" fill="none" stroke="#5ede7c" stroke-width="1.4" opacity="0.55"/>`,
-  },
-  {
-    categoria: 'moldura', slug: 'dourada', name: 'Dourada', posicao: 2, raridade: 'lendario',
-    asset: `<rect x="5" y="5" width="190" height="230" rx="10" fill="none" stroke="#f3c24d" stroke-width="5"/>${circ(5, 5, 6, '#f3c24d')}${circ(195, 5, 6, '#f3c24d')}${circ(5, 235, 6, '#f3c24d')}${circ(195, 235, 6, '#f3c24d')}`,
-  },
-  {
-    categoria: 'moldura', slug: 'rachada', name: 'Rachada (street)', posicao: 3,
-    asset: `<path d="M6 6 L194 6 L194 234 L6 234 Z" fill="none" stroke="#f2f7f4" stroke-width="3"/><path d="M6 90 L20 96 L6 104" fill="none" stroke="#f2f7f4" stroke-width="2"/><path d="M194 150 L180 156 L194 164" fill="none" stroke="#f2f7f4" stroke-width="2"/>`,
-  },
-];
+// ---------- item especial (6 — asas, aura, bicho de estimação, item
+// flutuante — sempre por cima, alguns atrás do corpo) ----------
+// as asas ficam dentro da própria grade (0–19) — nada de coordenada
+// negativa, porque a grade não "vaza" pra fora e vira sliver cortado.
+// Desenhadas por linhas de largura decrescente (igual "touca", mas sem
+// espelhar dentro da linha) pra dar o afunilado de ponta de asa.
+add('item_especial', 'asas_anjo', 'Asas de anjo', (g) => {
+  ret(g, 0, 13, 3, 1, '#f2f7f4');
+  ret(g, 0, 14, 4, 2, '#f2f7f4');
+  ret(g, 1, 16, 3, 2, '#e3ded4');
+  ret(g, 1, 18, 2, 2, '#e3ded4');
+  ret(g, 2, 20, 1, 2, '#c9c2b6');
+  espelhar(g);
+}, { raridade: 'raro' });
+add('item_especial', 'asas_dragao', 'Asas de dragão', (g) => {
+  ret(g, 0, 13, 4, 2, '#8a2530');
+  ret(g, 0, 15, 3, 2, '#8a2530');
+  ret(g, 1, 17, 2, 2, '#5c1720');
+  ret(g, 0, 15, 1, 1, '#5c1720');
+  ret(g, 1, 19, 1, 2, '#5c1720');
+  espelhar(g);
+}, { raridade: 'epico' });
+add('item_especial', 'aura_verde', 'Aura', (g) => {
+  for (let j = 0; j < A; j += 3) { px(g, 0, j, '#5ede7c'); }
+  espelhar(g);
+}, { raridade: 'raro' });
+add('item_especial', 'gato', 'Gato de estimação', (g) => {
+  ret(g, 15, 25, 4, 3, '#4a4a4a');
+  circulo(g, 18, 23, 2, '#4a4a4a');
+  px(g, 17, 21, '#4a4a4a'); px(g, 19, 21, '#4a4a4a');
+}, { raridade: 'raro' });
+add('item_especial', 'estrela_flutuante', 'Estrela flutuante', (g) => {
+  px(g, 16, 2, '#f3c24d'); ret(g, 15, 3, 3, 1, '#f3c24d'); px(g, 16, 4, '#f3c24d');
+}, { raridade: 'raro' });
+add('item_especial', 'folha_flutuante', 'Folhinha flutuante', (g) => {
+  circulo(g, 16, 3, 2, '#5ede7c');
+  px(g, 16, 5, '#3d8a52');
+}, { raridade: 'raro' });
 
 module.exports = { CATEGORIAS, ITENS };

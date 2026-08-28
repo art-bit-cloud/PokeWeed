@@ -57,6 +57,12 @@ export async function render() {
     return cat.itensPorCategoria.get('tom_pele')?.get(slug)?.asset;
   }
 
+  function corCabeloAtual() {
+    const slug = rascunho.cor_cabelo;
+    if (!slug) return undefined;
+    return cat.itensPorCategoria.get('cor_cabelo')?.get(slug)?.asset;
+  }
+
   function pintarPreview() {
     const svg = montarPersonagemSvg(rascunho, { modo: 'cheio' });
     preview.innerHTML =
@@ -87,6 +93,7 @@ export async function render() {
     if (!c) return;
     const equipadoSlug = rascunho[c.slug] || null;
     const pele = corPeleAtual();
+    const cabelo = corCabeloAtual();
 
     if (!c.itens.length) {
       itens.innerHTML = vazio({ emoji: '🚧', titulo: 'Ainda sem itens nessa categoria', texto: 'Em breve tem mais por aqui.' });
@@ -99,7 +106,7 @@ export async function render() {
         const miniatura =
           c.tipo === 'cor'
             ? `<span class="pj-swatch" style="background:${esc(item.asset)}"></span>`
-            : montarItemSvg(c.slug, item, c.slug === 'corpo' ? pele : undefined) || '';
+            : montarItemSvg(c.slug, item, pele, cabelo) || '';
         const raridade = item.raridade && item.raridade !== 'comum' ? `<span class="pj-raridade ${esc(item.raridade)}">${esc(item.raridade)}</span>` : '';
         return `
           <button type="button" class="pj-item${ativo ? ' ativo' : ''}${item.desbloqueado ? '' : ' bloqueado'}"

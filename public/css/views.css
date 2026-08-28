@@ -686,13 +686,14 @@
 }
 .pj-preview {
   width: 100%; max-width: 220px;
-  aspect-ratio: 200 / 240;
+  aspect-ratio: 20 / 32;
   display: grid; place-items: center;
   border-radius: var(--r);
   background: var(--surface-2);
   overflow: hidden;
+  image-rendering: pixelated;
 }
-.pj-preview .pj-svg { width: 100%; height: 100%; display: block; }
+.pj-preview .pj-svg { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
 .pj-preview .vazio { padding: 10px; }
 .pj-preview .vazio .emoji { font-size: 30px; }
 .pj-preview .vazio h3 { font-size: 13px; }
@@ -724,7 +725,7 @@
   background: var(--surface-2);
   overflow: hidden;
 }
-.pj-item-vis .pj-svg { width: 100%; height: 100%; display: block; }
+.pj-item-vis .pj-svg { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
 .pj-item-nome {
   font-size: 10.5px; font-weight: 650; color: var(--text-dim); line-height: 1.25;
   overflow: hidden; text-overflow: ellipsis; display: -webkit-box;
